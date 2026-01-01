@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Realtime Chat</string>
+    <string name="title_activity_login">Sign In</string>
+    <string name="prompt_email">Email</string>
+    <string name="prompt_password">Password</string>
+    <string name="action_sign_in">Sign In</string>
+    <string name="action_sign_up">Sign Up</string>
+</resources>

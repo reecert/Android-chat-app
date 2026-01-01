@@ -1,0 +1,17 @@
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/model/ChatMetadata.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/service/FCMService.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/service/ModerationService.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/ChatServerApplication.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/repository/ChatMetadataRepository.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/controller/NotificationController.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/model/ModerationReport.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/security/FirebaseTokenFilter.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/model/MessageIndex.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/config/SecurityConfig.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/config/FirebaseConfig.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/controller/AdminController.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/repository/ModerationReportRepository.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/model/AuditLog.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/repository/MessageIndexRepository.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/repository/AuditLogRepository.java
+/Users/admin/realtime-chat-app/server/src/main/java/com/example/chatserver/service/ChatService.java
