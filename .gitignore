@@ -1,0 +1,20 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Maven
+server/target/
+
+# Firebase
+**/google-services.json
+**/serviceAccountKey.json
