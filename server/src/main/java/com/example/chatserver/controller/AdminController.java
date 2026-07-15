@@ -4,7 +4,6 @@ import com.example.chatserver.model.ChatMetadata;
 import com.example.chatserver.model.ModerationReport;
 import com.example.chatserver.service.ChatService;
 import com.example.chatserver.service.ModerationService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,11 +14,13 @@ import java.util.Map;
 @RequestMapping("/admin")
 public class AdminController {
 
-    @Autowired
-    private ChatService chatService;
+    private final ChatService chatService;
+    private final ModerationService moderationService;
 
-    @Autowired
-    private ModerationService moderationService;
+    public AdminController(ChatService chatService, ModerationService moderationService) {
+        this.chatService = chatService;
+        this.moderationService = moderationService;
+    }
 
     @GetMapping("/chats")
     public List<ChatMetadata> searchChats(@RequestParam("query") String query) {
@@ -27,14 +28,25 @@ public class AdminController {
     }
 
     @PostMapping("/reports")
-    public ModerationReport createReport(@RequestBody ReportRequest request) {
-        return moderationService.createReport(request.getChatId(), request.getMessageId(), request.getReporterUid(),
-                request.getReason());
+    public ResponseEntity<?> createReport(@RequestBody ReportRequest request) {
+        if (request.getChatId() == null || request.getMessageId() == null || request.getReporterUid() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "chatId, messageId, and reporterUid are required"));
+        }
+        ModerationReport report = moderationService.createReport(
+                request.getChatId(), request.getMessageId(), request.getReporterUid(), request.getReason());
+        return ResponseEntity.ok(report);
     }
 
     @GetMapping("/reports")
-    public List<ModerationReport> getReports(@RequestParam("status") String status) {
-        return moderationService.getReports(ModerationReport.ReportStatus.valueOf(status));
+    public ResponseEntity<?> getReports(@RequestParam("status") String status) {
+        ModerationReport.ReportStatus reportStatus;
+        try {
+            reportStatus = ModerationReport.ReportStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("error", "Invalid status. Must be one of: OPEN, RESOLVED"));
+        }
+        return ResponseEntity.ok(moderationService.getReports(reportStatus));
     }
 
     @PostMapping("/reports/{reportId}/resolve")

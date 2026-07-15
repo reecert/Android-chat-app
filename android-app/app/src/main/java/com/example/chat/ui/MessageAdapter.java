@@ -1,4 +1,4 @@
-package main.java.com.example.chat.ui;
+package com.example.chat.ui;
 
 import android.view.LayoutInflater;
 import android.view.View;

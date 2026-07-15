@@ -2,9 +2,9 @@ package com.example.chatserver.controller;
 
 import com.example.chatserver.service.ChatService;
 import com.example.chatserver.service.FCMService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,24 +14,36 @@ import java.util.Map;
 @RequestMapping("/notify")
 public class NotificationController {
 
-    @Autowired
-    private FCMService fcmService;
+    private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
 
-    @Autowired
-    private ChatService chatService;
+    private final FCMService fcmService;
+    private final ChatService chatService;
+
+    public NotificationController(FCMService fcmService, ChatService chatService) {
+        this.fcmService = fcmService;
+        this.chatService = chatService;
+    }
 
     @PostMapping("/message")
-    public ResponseEntity<?> notifyMessage(@RequestBody MessageSyncRequest request,
-            @AuthenticationPrincipal Object principal) {
+    public ResponseEntity<?> notifyMessage(@RequestBody MessageSyncRequest request) {
+        // Validate required fields
+        if (request.getChatId() == null || request.getMessageId() == null || request.getSenderId() == null) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("error", "chatId, messageId, and senderId are required"));
+        }
+
         chatService.upsertChatMetadata(request.getChatId(), request.getParticipantUids(), request.getText());
         chatService.indexMessage(request.getMessageId(), request.getChatId(), request.getSenderId(), request.getText());
 
-        if (request.getTargetTokens() != null) {
+        if (request.getTargetTokens() != null && !request.getTargetTokens().isEmpty()) {
+            String notificationBody = (request.getSenderName() != null ? request.getSenderName() : "Someone")
+                    + ": " + (request.getText() != null ? request.getText() : "");
             for (String token : request.getTargetTokens()) {
-                fcmService.sendNotification(token, "New Message", request.getSenderName() + ": " + request.getText(),
-                        request.getChatId());
+                fcmService.sendNotification(token, "New Message", notificationBody, request.getChatId());
             }
         }
+
+        log.info("Synced message {} in chat {}", request.getMessageId(), request.getChatId());
         return ResponseEntity.ok(Map.of("status", "synced_and_notified"));
     }
 

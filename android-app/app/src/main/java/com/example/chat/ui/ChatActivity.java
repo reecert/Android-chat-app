@@ -3,6 +3,7 @@ package com.example.chat.ui;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -16,33 +17,39 @@ import com.example.chat.R;
 import com.example.chat.data.BackendService;
 import com.example.chat.model.Message;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.Response;
 import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Call;
 import retrofit2.Callback;
-import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class ChatActivity extends AppCompatActivity {
+
+    private static final String TAG = "ChatActivity";
 
     private String chatId;
     private DatabaseReference chatRef;
     private MessageAdapter adapter;
     private EditText etMessage;
     private BackendService backendService;
+
+    // Cached auth token for OkHttp interceptor
+    private volatile String cachedIdToken;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,8 +65,8 @@ public class ChatActivity extends AppCompatActivity {
             chatId = intent.getStringExtra("chatId");
         }
 
-        if (chatId == null) {
-            Toast.makeText(this, "No Chat ID", Toast.LENGTH_SHORT).show();
+        if (chatId == null || chatId.isEmpty()) {
+            Toast.makeText(this, "No Chat ID provided", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -69,7 +76,9 @@ public class ChatActivity extends AppCompatActivity {
         Button btnSend = findViewById(R.id.btnSend);
 
         adapter = new MessageAdapter();
-        rvMessages.setLayoutManager(new LinearLayoutManager(this));
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+        layoutManager.setStackFromEnd(true);
+        rvMessages.setLayoutManager(layoutManager);
         rvMessages.setAdapter(adapter);
 
         chatRef = FirebaseDatabase.getInstance().getReference("messages").child(chatId);
@@ -97,33 +106,60 @@ public class ChatActivity extends AppCompatActivity {
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
+                Log.e(TAG, "Database listener cancelled", error.toException());
             }
         });
 
+        // Pre-fetch auth token before setting up Retrofit
+        refreshAuthToken();
         setupRetrofit();
 
         btnSend.setOnClickListener(v -> sendMessage());
+    }
+
+    /**
+     * Fetches (or refreshes) the Firebase ID token and caches it for the OkHttp interceptor.
+     */
+    private void refreshAuthToken() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null) {
+            user.getIdToken(false).addOnSuccessListener(result -> {
+                cachedIdToken = result.getToken();
+            }).addOnFailureListener(e -> {
+                Log.e(TAG, "Failed to fetch ID token", e);
+            });
+        }
     }
 
     private void setupRetrofit() {
         HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
         logging.setLevel(HttpLoggingInterceptor.Level.BODY);
 
-        // Add Auth Interceptor
+        // Auth interceptor that attaches the Firebase ID token to every request
+        Interceptor authInterceptor = chain -> {
+            Request original = chain.request();
+            Request.Builder builder = original.newBuilder();
+
+            if (cachedIdToken != null) {
+                builder.header("Authorization", "Bearer " + cachedIdToken);
+            }
+
+            Response response = chain.proceed(builder.build());
+
+            // If we get a 401, try refreshing the token for the next request
+            if (response.code() == 401) {
+                Log.w(TAG, "Received 401 — token may be expired, refreshing");
+                refreshAuthToken();
+            }
+
+            return response;
+        };
+
         OkHttpClient client = new OkHttpClient.Builder()
+                .addInterceptor(authInterceptor)
                 .addInterceptor(logging)
-                .addInterceptor(chain -> {
-                    // In real app, blocking get token is bad, but for demo OK or use Authenticator
-                    // Ideally we get token asynchronously before request
-                    Request original = chain.request();
-                    // For demo we skip Auth header or add it via a separate async flow if strictly
-                    // needed.
-                    // The backend requires it, but fetching it synchronously here triggers network
-                    // on main thread exception if not careful.
-                    // We will assume "Authenticated" for now or use a simple hack.
-                    return chain.proceed(original);
-                })
                 .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build();
 
         Retrofit retrofit = new Retrofit.Builder()
@@ -137,56 +173,55 @@ public class ChatActivity extends AppCompatActivity {
 
     private void sendMessage() {
         String text = etMessage.getText().toString().trim();
-        if (text.isEmpty())
-            return;
+        if (text.isEmpty()) return;
 
-        String uid = FirebaseAuth.getInstance().getUid();
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser == null) {
+            Toast.makeText(this, "Not authenticated", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String uid = currentUser.getUid();
         String messageId = chatRef.push().getKey();
+        if (messageId == null) {
+            Log.e(TAG, "Failed to generate message ID");
+            return;
+        }
+
         Message message = new Message(messageId, uid, text, System.currentTimeMillis());
 
         chatRef.child(messageId).setValue(message)
                 .addOnSuccessListener(aVoid -> {
                     etMessage.setText("");
-                    // Call Backend to Sync & Notify
                     syncWithBackend(message);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Failed to send message", e);
+                    Toast.makeText(this, "Failed to send message", Toast.LENGTH_SHORT).show();
                 });
     }
 
     private void syncWithBackend(Message message) {
-        // Simplified: Participant UIDs & Target Tokens should be known.
-        // For demo, we just send dummy or current uid.
-        // In real app, we fetch chat participants from /chats/{chatId}
-
         BackendService.MessageSyncRequest req = new BackendService.MessageSyncRequest(
                 chatId, message.messageId, message.senderId, "User", message.text,
-                Arrays.asList(message.senderId, "other-uid"), // Dummy participants
-                null // Target tokens (let backend handle or empty)
+                Arrays.asList(message.senderId, "other-uid"), // In production: fetch real participants
+                null // Target tokens — let backend resolve or leave empty
         );
 
-        // We need auth token.
-        FirebaseAuth.getInstance().getCurrentUser().getIdToken(false).addOnSuccessListener(result -> {
-            String token = result.getToken();
-            // Manually create new call with header or just proceed if interceptor wasn't
-            // set up perfectly
-            // Since I avoided complex interceptor, I relies on finding a way to pass auth.
-            // Actually, the interceptor above was empty.
-            // I'll leave calling backend insecure for this specific line OR assume I
-            // configured OkHttp with a static token if possible.
-            // But simpler: just fire and forget, if it fails due to 403, we know why.
-
-            // To fix 403, we really need the token.
-            // Let's just run it. If backend enforces auth, it fails.
-            backendService.syncAndNotify(req).enqueue(new Callback<Void>() {
-                @Override
-                public void onResponse(Call<Void> call, Response<Void> response) {
-                    // Log success
+        backendService.syncAndNotify(req).enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(@NonNull Call<Void> call, @NonNull retrofit2.Response<Void> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "Backend sync successful");
+                } else {
+                    Log.w(TAG, "Backend sync failed: HTTP " + response.code());
                 }
+            }
 
-                @Override
-                public void onFailure(Call<Void> call, Throwable t) {
-                    // Log error
-                }
-            });
+            @Override
+            public void onFailure(@NonNull Call<Void> call, @NonNull Throwable t) {
+                Log.e(TAG, "Backend sync error", t);
+            }
         });
     }
 }

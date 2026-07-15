@@ -1,4 +1,4 @@
-package main.java.com.example.chat.model;
+package com.example.chat.model;
 
 import com.google.firebase.database.IgnoreExtraProperties;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package main.java.com.example.chat.data;
+package com.example.chat.data;
 
 import java.util.List;
 import retrofit2.Call;

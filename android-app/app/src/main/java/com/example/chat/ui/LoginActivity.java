@@ -1,4 +1,4 @@
-package main.java.com.example.chat.ui;
+package com.example.chat.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -22,8 +22,7 @@ public class LoginActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
 
         if (mAuth.getCurrentUser() != null) {
-            startActivity(new Intent(this, ChatListActivity.class));
-            finish();
+            navigateToChatList();
             return;
         }
 
@@ -37,32 +36,51 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void login() {
-        String email = etEmail.getText().toString();
-        String password = etPassword.getText().toString();
-        if (email.isEmpty() || password.isEmpty())
-            return;
+        String email = etEmail.getText().toString().trim();
+        String password = etPassword.getText().toString().trim();
+        if (!validateInput(email, password)) return;
 
         mAuth.signInWithEmailAndPassword(email, password)
-                .addOnSuccessListener(authResult -> {
-                    startActivity(new Intent(this, ChatListActivity.class));
-                    finish();
-                })
+                .addOnSuccessListener(authResult -> navigateToChatList())
                 .addOnFailureListener(
                         e -> Toast.makeText(this, "Login Failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
     private void signUp() {
-        String email = etEmail.getText().toString();
-        String password = etPassword.getText().toString();
-        if (email.isEmpty() || password.isEmpty())
-            return;
+        String email = etEmail.getText().toString().trim();
+        String password = etPassword.getText().toString().trim();
+        if (!validateInput(email, password)) return;
 
         mAuth.createUserWithEmailAndPassword(email, password)
                 .addOnSuccessListener(authResult -> {
-                    Toast.makeText(this, "Signed Up", Toast.LENGTH_SHORT).show();
-                    // Setup user profile in Database here if needed
+                    Toast.makeText(this, "Account created successfully", Toast.LENGTH_SHORT).show();
+                    navigateToChatList();
                 })
                 .addOnFailureListener(
-                        e -> Toast.makeText(this, "SignUp Failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                        e -> Toast.makeText(this, "Sign Up Failed: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+    }
+
+    private boolean validateInput(String email, String password) {
+        if (email.isEmpty()) {
+            etEmail.setError("Email is required");
+            etEmail.requestFocus();
+            return false;
+        }
+        if (password.isEmpty()) {
+            etPassword.setError("Password is required");
+            etPassword.requestFocus();
+            return false;
+        }
+        if (password.length() < 6) {
+            etPassword.setError("Password must be at least 6 characters");
+            etPassword.requestFocus();
+            return false;
+        }
+        return true;
+    }
+
+    private void navigateToChatList() {
+        startActivity(new Intent(this, ChatListActivity.class));
+        finish();
     }
 }
